@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HUD_LINK Controller</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #00ff88;
+      --green2:  #00cc66;
+      --green-dim: #00ff8840;
+      --amber:   #ffb700;
+      --red:     #ff3b3b;
+      --bg:      #040c08;
+      --panel:   #060f0a;
+      --border:  #00ff8830;
+      --text:    #a8ffd0;
+      --dim:     #3a6652;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* ── SCANLINE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ── NOISE / VIGNETTE ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.65) 100%);
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+      gap: 20px;
+      position: relative;
+    }
+
+    /* ── HEADER ── */
+    header {
+      width: 100%;
+      max-width: 520px;
+      text-align: center;
+    }
+
+    .logo {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: clamp(1.6rem, 6vw, 2.6rem);
+      letter-spacing: 0.18em;
+      color: var(--green);
+      text-shadow: 0 0 20px var(--green), 0 0 60px var(--green2);
+      animation: flicker 8s infinite;
+    }
+
+    .logo span { color: var(--dim); }
+
+    .subtitle {
+      font-size: 0.72rem;
+      letter-spacing: 0.25em;
+      color: var(--dim);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    /* ── PANEL ── */
+    .panel {
+      width: 100%;
+      max-width: 520px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      opacity: 0.6;
+    }
+
+    .panel-header {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.62rem;
+      letter-spacing: 0.3em;
+      color: var(--dim);
+      padding: 10px 16px 8px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-header::before {
+      content: '';
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--dim);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .panel-header.active::before {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .panel-body { padding: 18px 16px; }
+
+    /* ── STATUS BLOCK ── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--dim);
+      flex-shrink: 0;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+
+    .dot.on  { background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.8s infinite; }
+    .dot.warn{ background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+    .dot.err { background: var(--red);   box-shadow: 0 0 10px var(--red);   }
+
+    /* ── BIG CLOCK ── */
+    .clock-display {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(2.8rem, 14vw, 5rem);
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 30px var(--green2), 0 0 80px rgba(0,255,136,0.2);
+      text-align: center;
+      letter-spacing: 0.08em;
+      line-height: 1;
+      padding: 10px 0 4px;
+      user-select: none;
+    }
+
+    .date-display {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--dim);
+      letter-spacing: 0.25em;
+      padding-bottom: 6px;
+    }
+
+    .seconds-bar {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .seconds-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green2), var(--green));
+      border-radius: 2px;
+      transition: width 1s linear;
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      border: 1px solid;
+      border-radius: 3px;
+      padding: 11px 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+      position: relative;
+      overflow: hidden;
+      flex: 1;
+      min-height: 46px;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: currentColor;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .btn:active::after { opacity: 0.12; }
+
+    .btn-primary {
+      color: var(--green);
+      border-color: var(--green);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: rgba(0,255,136,0.08);
+      box-shadow: 0 0 16px rgba(0,255,136,0.3), inset 0 0 16px rgba(0,255,136,0.05);
+    }
+
+    .btn-accent {
+      color: var(--amber);
+      border-color: var(--amber);
+    }
+    .btn-accent:hover:not(:disabled) {
+      background: rgba(255,183,0,0.08);
+      box-shadow: 0 0 16px rgba(255,183,0,0.3);
+    }
+
+    .btn-danger {
+      color: var(--red);
+      border-color: var(--red);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(255,59,59,0.08);
+      box-shadow: 0 0 16px rgba(255,59,59,0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* ── TOGGLE ── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 12px;
+    }
+
+    .toggle-label {
+      font-size: 0.75rem;
+      color: var(--dim);
+      letter-spacing: 0.1em;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px; height: 20px;
+    }
+
+    .toggle input { display: none; }
+
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.3s;
+      border: 1px solid var(--dim);
+    }
+
+    .toggle input:checked + .toggle-track {
+      background: rgba(0,255,136,0.2);
+      border-color: var(--green);
+      box-shadow: 0 0 8px rgba(0,255,136,0.3);
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--dim);
+      transition: transform 0.3s, background 0.3s;
+    }
+
+    .toggle input:checked + .toggle-track::after {
+      transform: translateX(20px);
+      background: var(--green);
+    }
+
+    /* ── LOG ── */
+    .log-box {
+      font-size: 0.72rem;
+      line-height: 1.7;
+      color: var(--dim);
+      max-height: 120px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .log-box::-webkit-scrollbar { width: 3px; }
+    .log-box::-webkit-scrollbar-track { background: transparent; }
+    .log-box::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .log-line { display: flex; gap: 8px; }
+    .log-ts { color: var(--dim); opacity: 0.5; flex-shrink: 0; }
+    .log-msg { }
+    .log-ok   { color: var(--green); }
+    .log-warn { color: var(--amber); }
+    .log-err  { color: var(--red);   }
+
+    /* ── INFO GRID ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .info-cell {
+      background: var(--panel);
+      padding: 10px 12px;
+    }
+
+    .info-cell label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      color: var(--dim);
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .info-cell value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      color: var(--green);
+    }
+
+    /* ── COMPAT WARNING ── */
+    .compat-warn {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(255,183,0,0.07);
+      border: 1px solid rgba(255,183,0,0.3);
+      border-radius: 4px;
+      padding: 12px 16px;
+      font-size: 0.72rem;
+      color: var(--amber);
+      letter-spacing: 0.05em;
+      line-height: 1.6;
+      display: none;
+    }
+
+    .compat-warn.visible { display: block; }
+
+    /* ── SENT FLASH ── */
+    @keyframes sentFlash {
+      0%   { box-shadow: 0 0 0 0 var(--green); }
+      50%  { box-shadow: 0 0 30px 6px rgba(0,255,136,0.4); }
+      100% { box-shadow: 0 0 0 0 var(--green); }
+    }
+
+    .sent-flash { animation: sentFlash 0.5s ease-out; }
+
+    /* ── ANIMATIONS ── */
+    @keyframes flicker {
+      0%,100% { opacity: 1; }
+      93%      { opacity: 1; }
+      94%      { opacity: 0.85; }
+      95%      { opacity: 1; }
+      97%      { opacity: 0.9; }
+      98%      { opacity: 1; }
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .panel { animation: fadeIn 0.4s ease both; }
+    .panel:nth-child(2) { animation-delay: 0.1s; }
+    .panel:nth-child(3) { animation-delay: 0.2s; }
+    .panel:nth-child(4) { animation-delay: 0.3s; }
+
+    /* ── RESPONSIVE FOOTER ── */
+    footer {
+      font-size: 0.6rem;
+      color: var(--dim);
+      opacity: 0.4;
+      letter-spacing: 0.15em;
+      text-align: center;
+      padding-top: 4px;
+    }
+
+    /* ── CORNER DECORATIONS ── */
+    .corner-deco {
+      position: absolute;
+      width: 10px; height: 10px;
+      border-color: var(--green2);
+      border-style: solid;
+      opacity: 0.4;
+    }
+    .corner-deco.tl { top: 0; left: 0;  border-width: 1px 0 0 1px; }
+    .corner-deco.tr { top: 0; right: 0; border-width: 1px 1px 0 0; }
+    .corner-deco.bl { bottom: 0; left: 0;  border-width: 0 0 1px 1px; }
+    .corner-deco.br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+    /* mobile tap highlight */
+    .btn { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">HUD<span>_</span>LINK</div>
+    <div class="subtitle">BLE Field Controller · ESP32-C3</div>
+  </header>
+
+  <!-- COMPAT WARNING -->
+  <div class="compat-warn" id="compatWarn">
+    ⚠ Web Bluetooth requires <strong>Chrome / Edge</strong> on Android or Desktop.<br>
+    Safari and Firefox are not supported. Make sure Bluetooth is enabled on your device.
+  </div>
+
+  <!-- PANEL 1: CLOCK -->
+  <div class="panel" id="clockPanel">
+    <div class="corner-deco tl"></div>
+    <div class="corner-deco tr"></div>
+    <div class="corner-deco bl"></div>
+    <div class="corner-deco br"></div>
+    <div class="panel-header" id="clockHeader">LOCAL TIME</div>
+    <div class="panel-body">
+      <div class="clock-display" id="clockDisplay">--:--:--</div>
+      <div class="date-display" id="dateDisplay">--- / -- / ----</div>
+      <div class="seconds-bar">
+        <div class="seconds-fill" id="secondsFill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: CONNECTION -->
+  <div class="panel">
+    <div class="corner-deco tl"></div>
+    <div class="corner-deco tr"></div>
+    <div class="corner-deco bl"></div>
+    <div class="corner-deco br"></div>
+    <div class="panel-header" id="connHeader">BLUETOOTH LINK</div>
+    <div class="panel-body">
+
+      <div class="status-row" style="margin-bottom:14px;">
+        <div class="status-badge">
+          <div class="dot" id="connDot"></div>
+          <span id="connLabel">DISCONNECTED</span>
+        </div>
+        <div id="deviceName" style="font-size:0.7rem;color:var(--dim);"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnConnect">[ CONNECT ]</button>
+        <button class="btn btn-danger"  id="btnDisconnect" disabled>[ DISCONNECT ]</button>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">AUTO-SYNC ON CONNECT</span>
+        <label class="toggle">
+          <input type="checkbox" id="autoSyncToggle" checked />
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+
+      <div class="info-grid" style="margin-top:14px;">
+        <div class="info-cell">
+          <label>Service UUID</label>
+          <value style="font-size:0.55rem;font-family:'Share Tech Mono',monospace;color:var(--dim);">4fafc201…</value>
+        </div>
+        <div class="info-cell">
+          <label>Characteristic</label>
+          <value style="font-size:0.55rem;font-family:'Share Tech Mono',monospace;color:var(--dim);">beb5483e…</value>
+        </div>
+        <div class="info-cell">
+          <label>Device Name</label>
+          <value style="font-size:0.75rem;">HUD_LINK</value>
+        </div>
+        <div class="info-cell">
+          <label>Format Sent</label>
+          <value style="font-size:0.75rem;">HH:MM:SS,MM/DD</value>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PANEL 3: SEND TIME -->
+  <div class="panel" id="sendPanel">
+    <div class="corner-deco tl"></div>
+    <div class="corner-deco tr"></div>
+    <div class="corner-deco bl"></div>
+    <div class="corner-deco br"></div>
+    <div class="panel-header" id="sendHeader">TIME TRANSMISSION</div>
+    <div class="panel-body">
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:160px;">
+          <div style="font-size:0.6rem;letter-spacing:0.2em;color:var(--dim);margin-bottom:5px;">OVERRIDE TIME (optional)</div>
+          <input type="time" id="timeOverride"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:3px;
+                   color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.9rem;
+                   padding:8px 10px;width:100%;outline:none;letter-spacing:0.1em;" />
+        </div>
+        <div style="flex:1;min-width:120px;">
+          <div style="font-size:0.6rem;letter-spacing:0.2em;color:var(--dim);margin-bottom:5px;">DATE</div>
+          <input type="date" id="dateOverride"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:3px;
+                   color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.9rem;
+                   padding:8px 10px;width:100%;outline:none;letter-spacing:0.05em;" />
+        </div>
+      </div>
+
+      <div id="previewStr" style="font-size:0.75rem;color:var(--dim);letter-spacing:0.1em;margin-bottom:14px;">
+        PAYLOAD: <span id="previewVal" style="color:var(--green);">--:--:--,--/--</span>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-accent" id="btnSend" disabled>[ SEND TIME ]</button>
+        <button class="btn btn-primary" id="btnSendNow" disabled>[ SYNC NOW ]</button>
+      </div>
+
+      <div style="font-size:0.62rem;color:var(--dim);margin-top:10px;letter-spacing:0.06em;line-height:1.6;">
+        SEND TIME — uses override fields if set, else auto-fills from device clock.<br>
+        SYNC NOW — always uses live device time, ignores overrides.
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PANEL 4: LOG -->
+  <div class="panel">
+    <div class="corner-deco tl"></div>
+    <div class="corner-deco tr"></div>
+    <div class="corner-deco bl"></div>
+    <div class="corner-deco br"></div>
+    <div class="panel-header">SYSTEM LOG
+      <span style="margin-left:auto;cursor:pointer;font-size:0.65rem;" onclick="clearLog()">[ CLR ]</span>
+    </div>
+    <div class="panel-body">
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+  <footer>HUD_LINK v1.0 · Web Bluetooth API · ESP32-C3 Super Mini</footer>
+
+</div>
+
+<script>
+// ── UUIDs matching the firmware ──
+const SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+let bleDevice      = null;
+let bleServer      = null;
+let bleChar        = null;
+let isConnected    = false;
+
+// ── DOM ──
+const clockDisplay  = document.getElementById('clockDisplay');
+const dateDisplay   = document.getElementById('dateDisplay');
+const secondsFill   = document.getElementById('secondsFill');
+const connDot       = document.getElementById('connDot');
+const connLabel     = document.getElementById('connLabel');
+const connHeader    = document.getElementById('connHeader');
+const sendHeader    = document.getElementById('sendHeader');
+const clockHeader   = document.getElementById('clockHeader');
+const deviceName    = document.getElementById('deviceName');
+const btnConnect    = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const btnSend       = document.getElementById('btnSend');
+const btnSendNow    = document.getElementById('btnSendNow');
+const autoSyncToggle= document.getElementById('autoSyncToggle');
+const timeOverride  = document.getElementById('timeOverride');
+const dateOverride  = document.getElementById('dateOverride');
+const previewVal    = document.getElementById('previewVal');
+const logBox        = document.getElementById('logBox');
+const compatWarn    = document.getElementById('compatWarn');
+const clockPanel    = document.getElementById('clockPanel');
+
+// ── Compat check ──
+if (!navigator.bluetooth) {
+  compatWarn.classList.add('visible');
+  btnConnect.disabled = true;
+  btnConnect.title = 'Web Bluetooth not supported in this browser';
+}
+
+// ── CLOCK ──
+function padZ(n) { return String(n).padStart(2, '0'); }
+
+function tickClock() {
+  const now = new Date();
+  const h = padZ(now.getHours());
+  const m = padZ(now.getMinutes());
+  const s = padZ(now.getSeconds());
+  clockDisplay.textContent = `${h}:${m}:${s}`;
+
+  const days   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  dateDisplay.textContent =
+    `${days[now.getDay()]} · ${months[now.getMonth()]} ${padZ(now.getDate())} · ${now.getFullYear()}`;
+
+  secondsFill.style.width = (now.getSeconds() / 59 * 100) + '%';
+  updatePreview();
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ── PREVIEW ──
+function buildPayload(useOverride = true) {
+  const now = new Date();
+
+  let h = now.getHours(),
+      m = now.getMinutes(),
+      s = now.getSeconds(),
+      mo = now.getMonth() + 1,
+      d  = now.getDate();
+
+  if (useOverride) {
+    const tv = timeOverride.value; // "HH:MM"
+    const dv = dateOverride.value; // "YYYY-MM-DD"
+    if (tv) {
+      const [th, tm] = tv.split(':').map(Number);
+      h = th; m = tm; s = 0;
+    }
+    if (dv) {
+      const parts = dv.split('-');
+      mo = parseInt(parts[1]);
+      d  = parseInt(parts[2]);
+    }
+  }
+
+  return `${padZ(h)}:${padZ(m)}:${padZ(s)},${padZ(mo)}/${padZ(d)}`;
+}
+
+function updatePreview() {
+  previewVal.textContent = buildPayload(true);
+}
+
+timeOverride.addEventListener('input', updatePreview);
+dateOverride.addEventListener('input', updatePreview);
+
+// ── LOG ──
+function log(msg, type = '') {
+  const now = new Date();
+  const ts = `${padZ(now.getHours())}:${padZ(now.getMinutes())}:${padZ(now.getSeconds())}`;
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">[${ts}]</span><span class="log-msg ${type ? 'log-'+type : ''}">${msg}</span>`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function clearLog() { logBox.innerHTML = ''; }
+
+// ── CONNECTION STATE ──
+function setConnected(connected, name = '') {
+  isConnected = connected;
+  if (connected) {
+    connDot.className   = 'dot on';
+    connLabel.textContent = 'CONNECTED';
+    connHeader.classList.add('active');
+    sendHeader.classList.add('active');
+    clockHeader.classList.add('active');
+    deviceName.textContent = name || 'HUD_LINK';
+    btnConnect.disabled    = true;
+    btnDisconnect.disabled = false;
+    btnSend.disabled       = false;
+    btnSendNow.disabled    = false;
+  } else {
+    connDot.className   = 'dot';
+    connLabel.textContent = 'DISCONNECTED';
+    connHeader.classList.remove('active');
+    sendHeader.classList.remove('active');
+    clockHeader.classList.remove('active');
+    deviceName.textContent = '';
+    btnConnect.disabled    = false;
+    btnDisconnect.disabled = true;
+    btnSend.disabled       = true;
+    btnSendNow.disabled    = true;
+    bleChar  = null;
+    bleServer = null;
+  }
+}
+
+// ── CONNECT ──
+btnConnect.addEventListener('click', async () => {
+  if (!navigator.bluetooth) { log('Web Bluetooth not supported', 'err'); return; }
+  try {
+    log('Scanning for HUD_LINK…');
+    connDot.className = 'dot warn';
+    connLabel.textContent = 'SCANNING…';
+    btnConnect.disabled = true;
+
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'HUD_LINK' }],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+    log(`Device found: ${bleDevice.name}`, 'ok');
+
+    connDot.className = 'dot warn';
+    connLabel.textContent = 'CONNECTING…';
+
+    bleServer = await bleDevice.gatt.connect();
+    log('GATT server connected', 'ok');
+
+    const service = await bleServer.getPrimaryService(SERVICE_UUID);
+    bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
+    log('Characteristic acquired', 'ok');
+
+    setConnected(true, bleDevice.name);
+    log('BLE link established ✓', 'ok');
+
+    if (autoSyncToggle.checked) {
+      await sendTime(false);
+    }
+
+  } catch (err) {
+    log(`Error: ${err.message}`, 'err');
+    setConnected(false);
+    connDot.className = 'dot err';
+    connLabel.textContent = 'FAILED';
+    setTimeout(() => { if (!isConnected) setConnected(false); }, 2000);
+  }
+});
+
+// ── DISCONNECT ──
+btnDisconnect.addEventListener('click', () => {
+  if (bleDevice && bleDevice.gatt.connected) {
+    bleDevice.gatt.disconnect();
+    log('Disconnected by user', 'warn');
+  }
+});
+
+function onDisconnected() {
+  log('BLE link lost', 'warn');
+  setConnected(false);
+}
+
+// ── SEND TIME ──
+async function sendTime(useOverride = true) {
+  if (!bleChar) { log('Not connected', 'err'); return; }
+  try {
+    const payload = buildPayload(useOverride);
+    const encoder = new TextEncoder();
+    await bleChar.writeValue(encoder.encode(payload));
+
+    log(`Sent → ${payload}`, 'ok');
+
+    // flash the clock panel
+    clockPanel.classList.remove('sent-flash');
+    void clockPanel.offsetWidth;
+    clockPanel.classList.add('sent-flash');
+
+  } catch (err) {
+    log(`Send failed: ${err.message}`, 'err');
+  }
+}
+
+btnSend.addEventListener('click',    () => sendTime(true));
+btnSendNow.addEventListener('click', () => sendTime(false));
+
+// ── STARTUP LOG ──
+log('HUD_LINK controller ready', 'ok');
+log('Bluetooth status: ' + (navigator.bluetooth ? 'available' : 'NOT SUPPORTED'), navigator.bluetooth ? '' : 'err');
+</script>
+</body>
+</html>
